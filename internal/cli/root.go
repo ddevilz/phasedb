@@ -4,5 +4,9 @@ package cli
 import "github.com/spf13/cobra"
 
 func NewRootCmd(version string) *cobra.Command {
-	return &cobra.Command{Use: "phasedb", Version: version}
+	return &cobra.Command{
+		Use:   "phasedb",
+		Short: "Expand-contract database migrations for MySQL",
+		Version: version,
+	}
 }
