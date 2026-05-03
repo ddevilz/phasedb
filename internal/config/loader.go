@@ -27,7 +27,10 @@ func ResolveDSN(flagVal string) (string, error) {
 	data, err := os.ReadFile("phasedb.yaml")
 	if err == nil {
 		var gc GlobalConfig
-		if parseErr := yaml.Unmarshal(data, &gc); parseErr == nil && gc.DatabaseURL != "" {
+		if parseErr := yaml.Unmarshal(data, &gc); parseErr != nil {
+			return "", fmt.Errorf("phasedb.yaml: %w", parseErr)
+		}
+		if gc.DatabaseURL != "" {
 			return gc.DatabaseURL, nil
 		}
 	}

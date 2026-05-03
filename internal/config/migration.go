@@ -43,6 +43,10 @@ func (m *MigrationFile) validate() error {
 
 func validatePhase(p Phase, idx int) error {
 	switch p.Name {
+	case "expand", "contract":
+		if p.SQL == "" {
+			return fmt.Errorf("phase[%d] %q: sql is required", idx, p.Name)
+		}
 	case "gate":
 		if p.WaitUntil == nil {
 			return fmt.Errorf("phase[%d] %q: gate phase requires wait_until block", idx, p.Name)
@@ -57,6 +61,12 @@ func validatePhase(p Phase, idx int) error {
 		if p.Batch.Size <= 0 {
 			return fmt.Errorf("phase[%d] %q: batch.size must be > 0", idx, p.Name)
 		}
+	}
+	switch p.OnFailure {
+	case "", "rollback", "none":
+		// valid
+	default:
+		return fmt.Errorf("phase[%d] %q: on_failure must be one of: rollback, none (got %q)", idx, p.Name, p.OnFailure)
 	}
 	if p.OnFailure == "rollback" && p.RollbackSQL == "" {
 		return fmt.Errorf("phase[%d] %q: on_failure: rollback requires rollback_sql", idx, p.Name)
