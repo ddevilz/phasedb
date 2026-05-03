@@ -3,12 +3,13 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	_ "github.com/go-sql-driver/mysql"
 )
 
 const (
@@ -39,6 +40,7 @@ func NewMySQLFromDSN(dsn string) (Store, error) {
 }
 
 // normalizeMySQLDSN converts mysql:// URL to go-sql-driver format with UTC enforced.
+// Existing query parameters are preserved; parseTime and loc are always overridden to true/UTC.
 func normalizeMySQLDSN(rawDSN string) string {
 	s := strings.TrimPrefix(rawDSN, "mysql://")
 	atIdx := strings.LastIndex(s, "@")
@@ -52,8 +54,21 @@ func normalizeMySQLDSN(rawDSN string) string {
 		return rawDSN
 	}
 	host := hostDB[:slashIdx]
-	dbName := strings.Split(hostDB[slashIdx+1:], "?")[0]
-	return fmt.Sprintf("%s@tcp(%s)/%s?parseTime=true&loc=UTC", userPass, host, dbName)
+	rest := hostDB[slashIdx+1:]
+
+	// Parse existing query params
+	parts := strings.SplitN(rest, "?", 2)
+	dbName := parts[0]
+	existing := url.Values{}
+	if len(parts) == 2 {
+		existing, _ = url.ParseQuery(parts[1])
+	}
+
+	// Enforce required params (override caller values)
+	existing.Set("parseTime", "true")
+	existing.Set("loc", "UTC")
+
+	return fmt.Sprintf("%s@tcp(%s)/%s?%s", userPass, host, dbName, existing.Encode())
 }
 
 // EnsureSchema creates the phasedb tables if they do not exist.
@@ -201,6 +216,7 @@ func (s *mysqlStore) DeleteHeartbeatsForCompletedMigrations(ctx context.Context)
 		WHERE NOT EXISTS (
 			SELECT 1 FROM phasedb_history ph
 			WHERE ph.migration_name = h.migration_name
+			  AND ph.phase_name = h.phase_name
 			  AND ph.event_type = 'PHASE_STARTED'
 			  AND NOT EXISTS (
 				SELECT 1 FROM phasedb_history ph2
@@ -274,7 +290,7 @@ func (s *mysqlStore) RefreshLock(ctx context.Context, migration, processID strin
 		return fmt.Errorf("store: RefreshLock (rows affected): %w", err)
 	}
 	if rows == 0 {
-		return ErrLockHeld
+		return ErrLockLost
 	}
 	return nil
 }
@@ -336,22 +352,8 @@ func scanEvent(row *sql.Row) (*PhaseEvent, error) {
 }
 
 // isDuplicateKeyError returns true if the error is a MySQL duplicate key error (1062).
+// Uses errors.As so wrapped errors are handled correctly.
 func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
 	var mysqlErr *mysql.MySQLError
-	if ok := isMySQL(err, &mysqlErr); ok {
-		return mysqlErr.Number == 1062
-	}
-	return false
-}
-
-// isMySQL is a helper to unwrap a MySQL error.
-func isMySQL(err error, target **mysql.MySQLError) bool {
-	if me, ok := err.(*mysql.MySQLError); ok {
-		*target = me
-		return true
-	}
-	return false
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
 }

@@ -5,7 +5,10 @@ import (
 	"errors"
 )
 
-var ErrLockHeld = errors.New("migration lock held by another process")
+var (
+	ErrLockHeld = errors.New("migration lock held by another process")
+	ErrLockLost = errors.New("migration lock was lost (expired or stolen)")
+)
 
 type Store interface {
 	InsertEvent(ctx context.Context, e PhaseEvent) error
