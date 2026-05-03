@@ -2,6 +2,11 @@ package phase
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/ddevilz/phasedb/internal/config"
 	"github.com/ddevilz/phasedb/internal/db"
@@ -9,16 +14,69 @@ import (
 )
 
 type ContractExecutor struct {
-	Phase     config.Phase
-	Migration string
+	Phase         config.Phase
+	Migration     string
+	AttemptNumber int // set by runner before Execute is called
 }
 
 func (c *ContractExecutor) Type() PhaseType { return TypeContract }
 
 func (c *ContractExecutor) Execute(ctx context.Context, adapter db.Adapter, s store.Store) error {
-	return nil // TODO: implement
+	stmts := splitSQLStatements(c.Phase.SQL)
+
+	// Find resume point from last checkpoint
+	lastCP, _ := s.LatestCheckpoint(ctx, c.Migration, c.Phase.Name, c.AttemptNumber)
+	resumeFrom := 0
+	if lastCP != nil {
+		resumeFrom = lastCP.StatementIndex + 1
+	}
+
+	for i, stmt := range stmts {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if i < resumeFrom {
+			continue // already applied in prior attempt
+		}
+
+		if _, err := adapter.ExecDDL(ctx, stmt, 30*time.Second); err != nil {
+			return fmt.Errorf("contract statement %d: %w", i, err)
+		}
+
+		// Checkpoint after each statement
+		cp := map[string]int{"statement_index": i}
+		cpJSON, _ := json.Marshal(cp)
+		if cpErr := s.InsertCheckpoint(ctx, store.CheckpointRow{
+			MigrationName:  c.Migration,
+			PhaseName:      c.Phase.Name,
+			AttemptNumber:  c.AttemptNumber,
+			StatementIndex: i,
+			CheckpointJSON: string(cpJSON),
+		}); cpErr != nil {
+			slog.Warn("contract checkpoint insert failed", "statement", i, "err", cpErr)
+		}
+	}
+	return nil
 }
 
 func (c *ContractExecutor) Rollback(ctx context.Context, adapter db.Adapter, s store.Store) error {
-	return nil // TODO: implement
+	if c.Phase.RollbackSQL == "" {
+		return nil
+	}
+	stmts := splitSQLStatements(c.Phase.RollbackSQL)
+	for _, stmt := range stmts {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := adapter.ExecDDL(ctx, stmt, 30*time.Second); err != nil {
+			return fmt.Errorf("contract rollback: %w", err)
+		}
+	}
+	return nil
+}
+
+func splitSQLStatements(sql string) []string {
+	return strings.Split(sql, ";")
 }
