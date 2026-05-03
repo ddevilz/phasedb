@@ -7,15 +7,7 @@ import (
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
-
-	"github.com/ddevilz/phasedb/internal/db"
 )
-
-func init() {
-	db.RegisterDriver("mysql", func(dsn string) (db.Adapter, error) {
-		return New(dsn)
-	})
-}
 
 type mysqlAdapter struct {
 	db *sql.DB

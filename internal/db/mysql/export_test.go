@@ -1,6 +1,14 @@
-package mysql
+package mysql_test
 
-import dbpkg "github.com/ddevilz/phasedb/internal/db"
+import (
+	"github.com/ddevilz/phasedb/internal/db/mysql"
+	dbpkg "github.com/ddevilz/phasedb/internal/db"
+)
 
-// Compile-time check: mysqlAdapter implements db.Adapter
-var _ dbpkg.Adapter = (*mysqlAdapter)(nil)
+// Compile-time check: mysql.New return type satisfies db.Adapter.
+var _ dbpkg.Adapter = mustAdapter()
+
+func mustAdapter() dbpkg.Adapter {
+	a, _ := mysql.New("mysql://u:p@localhost:3306/db")
+	return a
+}

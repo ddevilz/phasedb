@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	dbpkg "github.com/ddevilz/phasedb/internal/db"
-	_ "github.com/ddevilz/phasedb/internal/db/mysql"
 )
 
 // Compile-time check only — no actual DB connection needed
