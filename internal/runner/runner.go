@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -125,6 +126,10 @@ func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName
 
 	if execErr == nil {
 		termEvent.EventType = store.EventCompleted
+	} else if errors.Is(execErr, phase.ErrGateTimeout) {
+		termEvent.EventType = store.EventTimedOut
+		msg := truncate(execErr.Error(), 4096)
+		termEvent.ErrorMessage = &msg
 	} else {
 		msg := truncate(execErr.Error(), 4096)
 		termEvent.EventType = store.EventFailed

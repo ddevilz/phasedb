@@ -39,11 +39,9 @@ func (b *BackfillExecutor) Execute(ctx context.Context, adapter db.Adapter, s st
 		return fmt.Errorf("backfill: done_when initial check: %w", err)
 	}
 
-	// max_pk_at_start — only supported when a clean table name is available
-	// PKColumn is set but we cannot reliably parse the table name from the query without a SQL parser
-	// This is deferred to the lint/estimate phase which has access to the migration's target table
-	var maxPKAtStart *int64
-	_ = maxPKAtStart // used in checkpoint below
+	if cfg.PKColumn != "" {
+		slog.Warn("backfill: pk_column boundary limiting not yet implemented, ignoring pk_column", "pk_column", cfg.PKColumn)
+	}
 
 	var batchNum int64
 	var totalProcessed int64
@@ -70,7 +68,11 @@ func (b *BackfillExecutor) Execute(ctx context.Context, adapter db.Adapter, s st
 				backoffMs = 60000
 			}
 			slog.Warn("replica lag above threshold, throttling", "lag_ms", lag, "backoff_ms", backoffMs)
-			time.Sleep(time.Duration(backoffMs) * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(backoffMs) * time.Millisecond):
+			}
 			continue
 		}
 		consecutiveGoodReadings++
@@ -108,7 +110,12 @@ func (b *BackfillExecutor) Execute(ctx context.Context, adapter db.Adapter, s st
 			LastBatchAffected:  affected,
 			CheckpointedAt:     time.Now().UTC().Format(time.RFC3339),
 		}
-		cpJSON, _ := json.Marshal(cp)
+		cpJSON, jsonErr := json.Marshal(cp)
+		if jsonErr != nil {
+			// fallback to minimal checkpoint to not lose progress
+			cpJSON = []byte(`{}`)
+			slog.Warn("checkpoint marshal failed", "err", jsonErr)
+		}
 		if cpErr := s.InsertCheckpoint(ctx, store.CheckpointRow{
 			MigrationName:  b.Migration,
 			PhaseName:      b.Phase.Name,
@@ -124,7 +131,11 @@ func (b *BackfillExecutor) Execute(ctx context.Context, adapter db.Adapter, s st
 		}
 
 		if delay > 0 {
-			time.Sleep(delay)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
 		}
 	}
 }

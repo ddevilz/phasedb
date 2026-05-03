@@ -3,7 +3,6 @@ package phase
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/ddevilz/phasedb/internal/config"
 	"github.com/ddevilz/phasedb/internal/db"
@@ -21,7 +20,7 @@ func (e *ExpandExecutor) Execute(ctx context.Context, adapter db.Adapter, s stor
 	if e.Phase.SQL == "" {
 		return fmt.Errorf("expand phase has no sql")
 	}
-	result, err := adapter.ExecDDL(ctx, e.Phase.SQL, 30*time.Second)
+	result, err := adapter.ExecDDL(ctx, e.Phase.SQL, defaultDDLLockTimeout)
 	if err != nil {
 		return fmt.Errorf("expand DDL: %w", err)
 	}
@@ -33,6 +32,6 @@ func (e *ExpandExecutor) Rollback(ctx context.Context, adapter db.Adapter, s sto
 	if e.Phase.RollbackSQL == "" {
 		return nil
 	}
-	_, err := adapter.ExecDDL(ctx, e.Phase.RollbackSQL, 30*time.Second)
+	_, err := adapter.ExecDDL(ctx, e.Phase.RollbackSQL, defaultDDLLockTimeout)
 	return err
 }

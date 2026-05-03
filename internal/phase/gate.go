@@ -56,7 +56,11 @@ func (g *GateExecutor) Execute(ctx context.Context, adapter db.Adapter, s store.
 				if backoff > 60*time.Second {
 					backoff = 60 * time.Second
 				}
-				time.Sleep(backoff)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(backoff):
+				}
 				continue
 			}
 			return fmt.Errorf("gate: fatal query error: %w", err)
@@ -82,7 +86,11 @@ func (g *GateExecutor) Execute(ctx context.Context, adapter db.Adapter, s store.
 			"progress", fmt.Sprintf("%.1f%%", progress*100),
 		)
 
-		time.Sleep(pollInterval)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pollInterval):
+		}
 	}
 }
 

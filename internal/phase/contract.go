@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/ddevilz/phasedb/internal/config"
 	"github.com/ddevilz/phasedb/internal/db"
@@ -31,31 +30,38 @@ func (c *ContractExecutor) Execute(ctx context.Context, adapter db.Adapter, s st
 		resumeFrom = lastCP.StatementIndex + 1
 	}
 
-	for i, stmt := range stmts {
-		stmt = strings.TrimSpace(stmt)
+	realIdx := 0
+	for _, raw := range stmts {
+		stmt := strings.TrimSpace(raw)
 		if stmt == "" {
+			continue // don't count empty statements
+		}
+		if realIdx < resumeFrom {
+			realIdx++
 			continue
 		}
-		if i < resumeFrom {
-			continue // already applied in prior attempt
-		}
 
-		if _, err := adapter.ExecDDL(ctx, stmt, 30*time.Second); err != nil {
-			return fmt.Errorf("contract statement %d: %w", i, err)
+		if _, err := adapter.ExecDDL(ctx, stmt, defaultDDLLockTimeout); err != nil {
+			return fmt.Errorf("contract statement %d: %w", realIdx, err)
 		}
 
 		// Checkpoint after each statement
-		cp := map[string]int{"statement_index": i}
-		cpJSON, _ := json.Marshal(cp)
+		cp := map[string]int{"statement_index": realIdx}
+		cpJSON, jsonErr := json.Marshal(cp)
+		if jsonErr != nil {
+			cpJSON = []byte(`{}`)
+			slog.Warn("contract checkpoint marshal failed", "err", jsonErr)
+		}
 		if cpErr := s.InsertCheckpoint(ctx, store.CheckpointRow{
 			MigrationName:  c.Migration,
 			PhaseName:      c.Phase.Name,
 			AttemptNumber:  c.AttemptNumber,
-			StatementIndex: i,
+			StatementIndex: realIdx,
 			CheckpointJSON: string(cpJSON),
 		}); cpErr != nil {
-			slog.Warn("contract checkpoint insert failed", "statement", i, "err", cpErr)
+			slog.Warn("contract checkpoint insert failed", "statement", realIdx, "err", cpErr)
 		}
+		realIdx++
 	}
 	return nil
 }
@@ -70,7 +76,7 @@ func (c *ContractExecutor) Rollback(ctx context.Context, adapter db.Adapter, s s
 		if stmt == "" {
 			continue
 		}
-		if _, err := adapter.ExecDDL(ctx, stmt, 30*time.Second); err != nil {
+		if _, err := adapter.ExecDDL(ctx, stmt, defaultDDLLockTimeout); err != nil {
 			return fmt.Errorf("contract rollback: %w", err)
 		}
 	}

@@ -2,11 +2,14 @@ package phase
 
 import (
 	"context"
+	"time"
 
 	"github.com/ddevilz/phasedb/internal/config"
 	"github.com/ddevilz/phasedb/internal/db"
 	"github.com/ddevilz/phasedb/internal/store"
 )
+
+const defaultDDLLockTimeout = 30 * time.Second
 
 type PhaseType string
 
