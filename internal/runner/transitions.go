@@ -56,12 +56,15 @@ func CheckStateGate(state PhaseState, resumeMode bool, lock *store.LockRow) erro
 	case StateCompleted:
 		return nil // will be skipped
 	case StateRunning:
+		// lock is non-nil when DetermineState returns StateRunning
 		return fmt.Errorf("%w: held by %s", ErrAlreadyRunning, lock.ProcessID)
 	case StateOrphaned, StateFailed, StateTimedOut:
 		if !resumeMode {
 			return ErrRequiresResume
 		}
 		return nil
+	case StateRolledBack:
+		return nil // rolled-back phase can be re-run without resumeMode (state is clean)
 	case StatePending:
 		return nil
 	}

@@ -64,15 +64,10 @@ func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName
 		return fmt.Errorf("AcquireLock: %w", err)
 	}
 
-	// Start heartbeat goroutine — stopped by cancelHeartbeat on any exit
-	hbCtx, cancelHeartbeat := context.WithCancel(ctx)
-	defer cancelHeartbeat()
-	go RunHeartbeat(hbCtx, r.Store, r.Migration.Name, phaseName, 0, processID)
-	// attempt=0 for heartbeat initially; updated after we know the attempt number
-
 	// Compute attempt number (optimistic — will be confirmed by UNIQUE KEY)
 	maxAttempt, err := r.Store.MaxAttemptNumber(ctx, r.Migration.Name, phaseName)
 	if err != nil {
+		_ = r.Store.ReleaseLock(ctx, r.Migration.Name)
 		return err
 	}
 	attempt := maxAttempt + 1
@@ -80,7 +75,7 @@ func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName
 	// Per-phase config JSON for audit
 	phaseConfigJSON := phaseConfigToJSON(r.Migration, phaseName)
 
-	// Insert PHASE_STARTED — dup-key means another process won the race
+	// Insert PHASE_STARTED — dup-key means this attempt was already started (resume scenario)
 	startEvent := store.PhaseEvent{
 		MigrationName:   r.Migration.Name,
 		PhaseName:       phaseName,
@@ -93,14 +88,22 @@ func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName
 	}
 	if err := r.Store.InsertEvent(ctx, startEvent); err != nil {
 		_ = r.Store.ReleaseLock(ctx, r.Migration.Name)
-		return fmt.Errorf("%w: lost attempt_number race", ErrAlreadyRunning)
+		return fmt.Errorf("insert PHASE_STARTED failed (attempt may already exist): %w", err)
 	}
+
+	// Start heartbeat goroutine with real attempt number — stopped by cancelHeartbeat on any exit
+	hbCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go RunHeartbeat(hbCtx, r.Store, r.Migration.Name, phaseName, attempt, processID)
 
 	// Execute phase
 	execErr := ex.Execute(ctx, r.DB, r.Store)
 
 	// Terminal guard — check if a terminal event already exists (e.g., context cancel)
-	existing, _ := r.Store.LatestEventForAttempt(ctx, r.Migration.Name, phaseName, attempt)
+	existing, checkErr := r.Store.LatestEventForAttempt(ctx, r.Migration.Name, phaseName, attempt)
+	if checkErr != nil {
+		slog.Warn("terminal guard check failed, proceeding with insert", "err", checkErr)
+	}
 	if existing != nil && existing.EventType.IsTerminal() {
 		// Another path already inserted a terminal event — don't double-insert
 		if execErr == nil {
@@ -141,7 +144,9 @@ func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName
 			}
 			rbEvent := termEvent
 			rbEvent.EventType = store.EventRolledBack
-			_ = r.Store.InsertEvent(ctx, rbEvent)
+			if rbInsertErr := r.Store.InsertEvent(ctx, rbEvent); rbInsertErr != nil {
+				slog.Error("failed to insert PHASE_ROLLED_BACK event", "phase", phaseName, "err", rbInsertErr)
+			}
 		}
 	}
 

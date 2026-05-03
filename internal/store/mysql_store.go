@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	heartbeatInterval = 30 * time.Second
-	lockTTL           = 90 * time.Second
+	lockTTL = 90 * time.Second
 )
 
 type mysqlStore struct {
