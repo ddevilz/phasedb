@@ -1,3 +1,4 @@
 bin/
 /phasedb
 *.test
+docs/superpowers/
