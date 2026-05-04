@@ -28,4 +28,7 @@ type Store interface {
 	GetLock(ctx context.Context, migration string) (*LockRow, error)
 
 	EnsureSchema(ctx context.Context) error
+	// Close releases the underlying database connection pool.
+	// Only meaningful for stores created via NewMySQLFromDSN.
+	Close() error
 }

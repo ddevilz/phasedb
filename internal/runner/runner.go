@@ -27,19 +27,18 @@ func (r *Runner) Run(ctx context.Context) error {
 		return fmt.Errorf("EnsureSchema: %w", err)
 	}
 
-	executors := phase.BuildExecutors(r.Migration)
 	processID := fmt.Sprintf("%s:%d", mustHostname(), os.Getpid())
 
-	for i, ex := range executors {
-		phaseName := r.Migration.Phases[i].Name // use YAML phase name (lowercase)
-		if err := r.runPhase(ctx, ex, phaseName, processID); err != nil {
+	for _, p := range r.Migration.Phases {
+		phaseName := p.Name
+		if err := r.runPhase(ctx, p, phaseName, processID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName, processID string) error {
+func (r *Runner) runPhase(ctx context.Context, phaseConfig config.Phase, phaseName, processID string) error {
 	latest, err := r.Store.LatestEvent(ctx, r.Migration.Name, phaseName)
 	if err != nil {
 		return fmt.Errorf("LatestEvent: %w", err)
@@ -72,6 +71,13 @@ func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName
 		return err
 	}
 	attempt := maxAttempt + 1
+
+	// Build executor now that attempt number is known
+	ex := phase.BuildSingleExecutor(phaseConfig, r.Migration.Name, attempt)
+	if ex == nil {
+		_ = r.Store.ReleaseLock(ctx, r.Migration.Name)
+		return fmt.Errorf("unknown phase type: %s", phaseName)
+	}
 
 	// Per-phase config JSON for audit
 	phaseConfigJSON := phaseConfigToJSON(r.Migration, phaseName)
@@ -142,8 +148,7 @@ func (r *Runner) runPhase(ctx context.Context, ex phase.PhaseExecutor, phaseName
 
 	// Auto-rollback on failure if on_failure: rollback
 	if execErr != nil {
-		phaseConfig := findPhase(r.Migration, phaseName)
-		if phaseConfig != nil && phaseConfig.OnFailure == "rollback" {
+		if phaseConfig.OnFailure == "rollback" {
 			if rbErr := ex.Rollback(ctx, r.DB, r.Store); rbErr != nil {
 				slog.Error("rollback failed", "phase", phaseName, "err", rbErr)
 			}
@@ -182,14 +187,6 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-func findPhase(m *config.MigrationFile, name string) *config.Phase {
-	for i := range m.Phases {
-		if m.Phases[i].Name == name {
-			return &m.Phases[i]
-		}
-	}
-	return nil
-}
 
 func phaseConfigToJSON(m *config.MigrationFile, phaseName string) string {
 	for _, p := range m.Phases {

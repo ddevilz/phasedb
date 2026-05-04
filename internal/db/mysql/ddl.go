@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -42,7 +43,8 @@ func isMySQLLockTimeout(err error) bool {
 
 func containsCode(err error, code uint16) bool {
 	type mysqlErr interface{ Number() uint16 }
-	if me, ok := err.(mysqlErr); ok {
+	var me mysqlErr
+	if errors.As(err, &me) {
 		return me.Number() == code
 	}
 	return false

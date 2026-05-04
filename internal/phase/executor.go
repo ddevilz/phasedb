@@ -47,3 +47,19 @@ func BuildExecutors(m *config.MigrationFile) []PhaseExecutor {
 	}
 	return exs
 }
+
+// BuildSingleExecutor constructs a single executor for a phase, using the given attempt number.
+// This allows attempt-aware executors (backfill, contract) to use the correct checkpoint key.
+func BuildSingleExecutor(p config.Phase, migrationName string, attempt int) PhaseExecutor {
+	switch p.Name {
+	case "expand":
+		return &ExpandExecutor{Phase: p, Migration: migrationName}
+	case "backfill":
+		return &BackfillExecutor{Phase: p, Migration: migrationName, AttemptNumber: attempt}
+	case "gate":
+		return &GateExecutor{Phase: p, Migration: migrationName}
+	case "contract":
+		return &ContractExecutor{Phase: p, Migration: migrationName, AttemptNumber: attempt}
+	}
+	return nil
+}

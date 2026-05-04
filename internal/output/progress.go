@@ -1,24 +1,21 @@
 package output
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
-// FormatProgress returns a human-readable progress bar string.
-// pct should be 0.0–1.0.
+// FormatProgress renders a text progress bar.
+// pct: 0.0–1.0  width: total character width including brackets
+// If width <= 0, defaults to 40. Returns "" when width < 2 (after defaulting).
 func FormatProgress(pct float64, width int) string {
 	if width <= 0 {
 		width = 40
 	}
-	filled := int(pct * float64(width))
-	if filled > width {
-		filled = width
+	if width < 2 {
+		return ""
 	}
-	empty := width - filled
-	return fmt.Sprintf("[%s%s] %.1f%%",
-		strings.Repeat("=", filled),
-		strings.Repeat(" ", empty),
-		pct*100,
-	)
+	inner := width - 2
+	filled := int(pct * float64(inner))
+	if filled > inner {
+		filled = inner
+	}
+	return "[" + strings.Repeat("=", filled) + strings.Repeat(" ", inner-filled) + "]"
 }

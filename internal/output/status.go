@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/ddevilz/phasedb/internal/store"
@@ -25,13 +26,20 @@ type StatusJSON struct {
 	PhasedbVersion     string   `json:"phasedb_version"`
 }
 
+// PrintStatus writes the StatusJSON as indented JSON to stdout.
+func PrintStatus(st *StatusJSON) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(st)
+}
+
 // BuildStatus constructs a StatusJSON by querying the store for the latest events across all phases.
 // It iterates phases in canonical order and returns status for the most recently active phase.
 func BuildStatus(ctx context.Context, migration string, s store.Store, version string) (*StatusJSON, error) {
 	phases := []string{"expand", "backfill", "gate", "contract"}
 	status := &StatusJSON{
 		Migration:      migration,
-		PhaseStatus:    "NOT_STARTED",
+		PhaseStatus:    "not_started",
 		PhasedbVersion: version,
 	}
 
@@ -60,33 +68,56 @@ func BuildStatus(ctx context.Context, migration string, s store.Store, version s
 
 	// Live lock check
 	lock, _ := s.GetLock(ctx, migration)
-	if lock != nil && time.Now().UTC().Before(lock.ExpiresAt) {
+	if lock != nil {
 		status.RunningOn = lock.ProcessID
+		if time.Now().UTC().After(lock.ExpiresAt) {
+			status.Warning = "lock is stale — process may have crashed"
+		}
 	} else if currentEvent.EventType == store.EventStarted {
 		status.Warning = "process may be dead — no active lock found. Run phasedb resume or check liveness"
 	}
 
 	// Backfill progress from latest checkpoint
-	if currentPhase == "backfill" && currentEvent.EventType == store.EventStarted {
+	if currentPhase == "backfill" {
 		cp, _ := s.LatestCheckpoint(ctx, migration, currentPhase, currentEvent.AttemptNumber)
 		if cp != nil {
 			var bcp struct {
-				RowsProcessedTotal int64 `json:"rows_processed_total"`
-				NullRowsAtStart    int64 `json:"null_rows_at_start"`
+				RowsProcessedTotal int64                  `json:"rows_processed_total"`
+				NullRowsAtStart    int64                  `json:"null_rows_at_start"`
 			}
+			var meta map[string]interface{}
 			if err := json.Unmarshal([]byte(cp.CheckpointJSON), &bcp); err == nil && bcp.NullRowsAtStart > 0 {
 				p := float64(bcp.RowsProcessedTotal) / float64(bcp.NullRowsAtStart)
 				if p > 1.0 {
 					p = 1.0 // cap at 100%
 				}
 				status.BackfillProgress = &p
-				status.ProgressConfidence = "estimated"
+				confidence := "estimated"
+				if err2 := json.Unmarshal([]byte(cp.CheckpointJSON), &meta); err2 == nil {
+					if _, hasDoneWhen := meta["done_when"]; hasDoneWhen {
+						confidence = "exact"
+					}
+				}
+				status.ProgressConfidence = confidence
 				remaining := bcp.NullRowsAtStart - bcp.RowsProcessedTotal
 				if remaining < 0 {
 					remaining = 0
 				}
 				status.NullRowsRemaining = &remaining
 				status.RowsProcessedTotal = &bcp.RowsProcessedTotal
+			}
+		}
+	}
+
+	// gate status from latest checkpoint
+	if currentPhase == "gate" {
+		cp, err := s.LatestCheckpoint(ctx, migration, currentPhase, currentEvent.AttemptNumber)
+		if err == nil && cp != nil {
+			var meta map[string]interface{}
+			if jsonErr := json.Unmarshal([]byte(cp.CheckpointJSON), &meta); jsonErr == nil {
+				if gs, ok := meta["gate_status"].(string); ok {
+					status.GateStatus = gs
+				}
 			}
 		}
 	}

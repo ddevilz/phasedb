@@ -37,6 +37,7 @@ func (m *mockStore) GetLock(_ context.Context, _ string) (*store.LockRow, error)
 	return nil, nil
 }
 func (m *mockStore) EnsureSchema(_ context.Context) error { return nil }
+func (m *mockStore) Close() error                         { return nil }
 
 func TestBuildStatus_NotStarted(t *testing.T) {
 	ctx := context.Background()
@@ -45,8 +46,8 @@ func TestBuildStatus_NotStarted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if st.PhaseStatus != "NOT_STARTED" {
-		t.Errorf("expected PhaseStatus=NOT_STARTED, got %q", st.PhaseStatus)
+	if st.PhaseStatus != "not_started" {
+		t.Errorf("expected PhaseStatus=not_started, got %q", st.PhaseStatus)
 	}
 	if st.Migration != "test_migration" {
 		t.Errorf("expected Migration=test_migration, got %q", st.Migration)

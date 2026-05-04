@@ -1,0 +1,51 @@
+project_name: phasedb
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: phasedb
+    main: ./cmd/phasedb
+    binary: phasedb
+    ldflags:
+      - -X main.version={{.Version}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    env:
+      - CGO_ENABLED=0
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/ddevilz/phasedb:{{ .Version }}"
+      - "ghcr.io/ddevilz/phasedb:latest"
+    dockerfile: Dockerfile
+
+nfpms:
+  - package_name: phasedb
+    vendor: ddevilz
+    homepage: https://github.com/ddevilz/phasedb
+    description: Expand-contract migration coordinator for MySQL
+    license: MIT
+    formats: [deb, rpm]
+
+brews:
+  - repository:
+      owner: ddevilz
+      name: homebrew-tap
+    homepage: https://github.com/ddevilz/phasedb
+    description: Expand-contract migration coordinator
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

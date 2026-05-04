@@ -17,12 +17,14 @@ const (
 )
 
 type mysqlStore struct {
-	db *sql.DB
+	db    *sql.DB
+	ownDB bool // true when this store opened the *sql.DB and owns its Close
 }
 
 // NewMySQL creates a Store from an existing *sql.DB (used by the runner which already has a connection).
+// Close is a no-op because the caller owns the *sql.DB lifecycle.
 func NewMySQL(db *sql.DB) Store {
-	return &mysqlStore{db: db}
+	return &mysqlStore{db: db, ownDB: false}
 }
 
 // NewMySQLFromDSN opens a new *sql.DB from a DSN string and returns a Store.
@@ -35,7 +37,15 @@ func NewMySQLFromDSN(dsn string) (Store, error) {
 	}
 	db.SetMaxOpenConns(3)
 	db.SetMaxIdleConns(1)
-	return &mysqlStore{db: db}, nil
+	return &mysqlStore{db: db, ownDB: true}, nil
+}
+
+// Close closes the underlying *sql.DB if this store opened it.
+func (s *mysqlStore) Close() error {
+	if s.ownDB {
+		return s.db.Close()
+	}
+	return nil
 }
 
 // normalizeMySQLDSN converts mysql:// URL to go-sql-driver format with UTC enforced.
