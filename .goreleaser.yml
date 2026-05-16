@@ -46,6 +46,7 @@ brews:
   - repository:
       owner: ddevilz
       name: homebrew-phasedb
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/ddevilz/phasedb
     description: Expand-contract migration coordinator
 
