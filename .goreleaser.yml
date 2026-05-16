@@ -1,3 +1,5 @@
+version: 2
+
 project_name: phasedb
 
 before:
@@ -16,10 +18,10 @@ builds:
       - CGO_ENABLED=0
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 dockers:
@@ -27,10 +29,14 @@ dockers:
       - "ghcr.io/ddevilz/phasedb:{{ .Version }}"
       - "ghcr.io/ddevilz/phasedb:latest"
     dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
 
 nfpms:
   - package_name: phasedb
     vendor: ddevilz
+    maintainer: Devashish <jadhavom24@gmail.com>
     homepage: https://github.com/ddevilz/phasedb
     description: Expand-contract migration coordinator for MySQL
     license: MIT
