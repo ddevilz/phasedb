@@ -361,72 +361,72 @@ go install github.com/ddevilz/phasedb/cmd/phasedb@latest
 ### 1. Write a migration YAML
 
 ```yaml
-migration: V23_add_extrinsics_hash
+migration: add_checksum_column
 database: mysql
 phases:
   - name: expand
     sql: |
-      ALTER TABLE product_extrinsic
-        ADD COLUMN extrinsics_hash VARCHAR(64) NULL;
+      ALTER TABLE events
+        ADD COLUMN checksum VARCHAR(64) NULL;
     rollback_sql: |
-      ALTER TABLE product_extrinsic DROP COLUMN extrinsics_hash;
+      ALTER TABLE events DROP COLUMN checksum;
 
   - name: backfill
     on_failure: rollback
     batch:
       query: |
-        UPDATE product_extrinsic
-        SET extrinsics_hash = SHA2(CONCAT(product_id, extrinsic_key), 256)
-        WHERE extrinsics_hash IS NULL
+        UPDATE events
+        SET checksum = SHA2(CONCAT(user_id, payload), 256)
+        WHERE checksum IS NULL
         LIMIT {batch_size}
       size: 1000
       delay_ms: 10
       lag_threshold_ms: 500
-      done_when: "SELECT COUNT(*) FROM product_extrinsic WHERE extrinsics_hash IS NULL"
+      done_when: "SELECT COUNT(*) FROM events WHERE checksum IS NULL"
       done_expected: 0
 
   - name: gate
     wait_until:
-      query: "SELECT COUNT(*) FROM product_extrinsic WHERE extrinsics_hash IS NULL"
+      query: "SELECT COUNT(*) FROM events WHERE checksum IS NULL"
       expected: 0
       poll_interval_ms: 5000
       timeout_minutes: 120
 
   - name: contract
     sql: |
-      ALTER TABLE product_extrinsic
-        MODIFY COLUMN extrinsics_hash VARCHAR(64) NOT NULL;
-      ALTER TABLE product_extrinsic
-        ADD INDEX idx_extrinsics_hash (extrinsics_hash);
+      ALTER TABLE events
+        MODIFY COLUMN checksum VARCHAR(64) NOT NULL;
+      ALTER TABLE events
+        ADD INDEX idx_checksum (checksum);
     rollback_sql: |
-      ALTER TABLE product_extrinsic DROP INDEX idx_extrinsics_hash;
-      ALTER TABLE product_extrinsic MODIFY COLUMN extrinsics_hash VARCHAR(64) NULL;
+      ALTER TABLE events DROP INDEX idx_checksum;
+      ALTER TABLE events MODIFY COLUMN checksum VARCHAR(64) NULL;
 ```
 
 ### 2. Lint before running
 
 ```bash
-phasedb lint --migration V23.yaml --estimate --db "mysql://user:pass@host/db"
+phasedb lint --migration add_checksum_column.yaml --estimate --db "mysql://user:pass@host/db"
 ```
 
 ### 3. Run
 
 ```bash
 export DATABASE_URL="mysql://user:pass@host/db"
-phasedb run --migration V23.yaml
+phasedb run --migration add_checksum_column.yaml
 ```
 
 ### 4. Monitor
 
 ```bash
-phasedb status --migration V23_add_extrinsics_hash
-phasedb status --migration V23_add_extrinsics_hash --format json
+phasedb status --migration add_checksum_column
+phasedb status --migration add_checksum_column --format json
 ```
 
 ### 5. Resume if interrupted
 
 ```bash
-phasedb resume --migration V23.yaml
+phasedb resume --migration add_checksum_column.yaml
 ```
 
 ---
