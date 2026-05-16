@@ -39,7 +39,7 @@ nfpms:
 brews:
   - repository:
       owner: ddevilz
-      name: homebrew-tap
+      name: homebrew-phasedb
     homepage: https://github.com/ddevilz/phasedb
     description: Expand-contract migration coordinator
 
