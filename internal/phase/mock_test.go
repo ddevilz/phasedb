@@ -18,18 +18,21 @@ type mockAdapterFull struct {
 	ddlErr    error
 
 	// ExecBatch
-	batchResults []int64
-	batchIdx     int
-	batchErr     error
+	batchResults         []int64
+	batchIdx             int
+	batchErr             error
+	capturedBatchQueries []string // every query string passed to ExecBatch
 
 	// QueryScalar
 	scalarResults []int64
 	scalarIdx     int
 	scalarErr     error
+	scalarErrs    []error // per-call error override; indexed by call order (nil = no error)
 
 	// GetReplicaLag
-	lagValue int64
-	lagErr   error
+	lagValue     int64
+	lagErr       error
+	lagCallCount int // counts invocations
 }
 
 func (m *mockAdapterFull) ExecDDL(_ context.Context, _ string, _ time.Duration) (*db.DDLResult, error) {
@@ -40,7 +43,8 @@ func (m *mockAdapterFull) ExecDDL(_ context.Context, _ string, _ time.Duration) 
 	return &db.DDLResult{}, nil
 }
 
-func (m *mockAdapterFull) ExecBatch(_ context.Context, _ string, _ int) (int64, error) {
+func (m *mockAdapterFull) ExecBatch(_ context.Context, q string, _ int) (int64, error) {
+	m.capturedBatchQueries = append(m.capturedBatchQueries, q)
 	if m.batchErr != nil {
 		return 0, m.batchErr
 	}
@@ -53,25 +57,31 @@ func (m *mockAdapterFull) ExecBatch(_ context.Context, _ string, _ int) (int64, 
 }
 
 func (m *mockAdapterFull) QueryScalar(_ context.Context, _ string, _ ...any) (int64, error) {
+	idx := m.scalarIdx
+	m.scalarIdx++
+	// Per-call error takes priority over global scalarErr
+	if idx < len(m.scalarErrs) && m.scalarErrs[idx] != nil {
+		return 0, m.scalarErrs[idx]
+	}
 	if m.scalarErr != nil {
 		return 0, m.scalarErr
 	}
-	if m.scalarIdx >= len(m.scalarResults) {
+	if idx >= len(m.scalarResults) {
 		return 0, nil
 	}
-	v := m.scalarResults[m.scalarIdx]
-	m.scalarIdx++
-	return v, nil
+	return m.scalarResults[idx], nil
 }
 
 func (m *mockAdapterFull) GetReplicaLag(_ context.Context) (int64, error) {
+	m.lagCallCount++
 	return m.lagValue, m.lagErr
 }
 
 // mockStore is a minimal in-memory store for tests.
 type mockStore struct {
 	store.Store // embed for any methods not overridden
-	checkpoints []store.CheckpointRow
+	checkpoints        []store.CheckpointRow
+	checkpointToReturn *store.CheckpointRow // returned by LatestCheckpoint; nil = no prior checkpoint
 }
 
 func (s *mockStore) InsertCheckpoint(_ context.Context, c store.CheckpointRow) error {
@@ -80,5 +90,5 @@ func (s *mockStore) InsertCheckpoint(_ context.Context, c store.CheckpointRow) e
 }
 
 func (s *mockStore) LatestCheckpoint(_ context.Context, _, _ string, _ int) (*store.CheckpointRow, error) {
-	return nil, nil
+	return s.checkpointToReturn, nil
 }
