@@ -8,6 +8,7 @@ import (
 
 	"github.com/ddevilz/phasedb/internal/config"
 	"github.com/ddevilz/phasedb/internal/phase"
+	"github.com/ddevilz/phasedb/internal/store"
 )
 
 // TestBackfillExecutor_DoneWhenTerminates verifies that Execute returns nil when
@@ -302,5 +303,49 @@ func TestBackfillExecutor_PKCursorQueryError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cursor query failed") {
 		t.Errorf("expected cursor error in message, got: %v", err)
+	}
+}
+
+// TestBackfillExecutor_ResumeLoadsLastPK verifies that when a checkpoint exists
+// with a LastPK value, the backfill resumes from that position rather than 0.
+func TestBackfillExecutor_ResumeLoadsLastPK(t *testing.T) {
+	cpJSON := `{"rows_processed_total":50,"batch_number":10,"last_pk":5000}`
+	adapter := &mockAdapterFull{
+		// 1 batch with rows starting from lastPK=5000, then empty + done
+		batchResults:  []int64{5, 0},
+		scalarResults: []int64{5, 5500, 0}, // done_when_initial=5, cursor→5500, done_when_post=0
+	}
+	s := &mockStore{
+		checkpointToReturn: &store.CheckpointRow{
+			CheckpointJSON: cpJSON,
+		},
+	}
+
+	ex := &phase.BackfillExecutor{
+		Phase: config.Phase{
+			Name: "backfill",
+			Batch: &config.BatchConfig{
+				Query:         "UPDATE T SET C = 1 WHERE ID > {last_id} AND C IS NULL LIMIT {batch_size}",
+				Size:          5,
+				DelayMs:       0,
+				PKColumn:      "id",
+				PKCursorQuery: "SELECT COALESCE(MAX(ID), {last_id}) FROM T WHERE ID > {last_id} ORDER BY ID LIMIT {batch_size}",
+				DoneWhen:      "SELECT COUNT(*) FROM T WHERE C IS NULL",
+				DoneExpected:  0,
+			},
+		},
+		Migration:     "V1",
+		AttemptNumber: 1,
+	}
+
+	if err := ex.Execute(context.Background(), adapter, s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adapter.capturedBatchQueries) == 0 {
+		t.Fatal("no batch queries captured")
+	}
+	// Resume should start from lastPK=5000, not 0
+	if !strings.Contains(adapter.capturedBatchQueries[0], "ID > 5000") {
+		t.Errorf("expected resume from ID > 5000, got: %s", adapter.capturedBatchQueries[0])
 	}
 }
