@@ -44,7 +44,10 @@ docker pull ghcr.io/ddevilz/phasedb:latest
 
 ### Binary (GitHub Releases)
 ```bash
-curl -sSL https://github.com/ddevilz/phasedb/releases/latest/download/phasedb_linux_amd64.tar.gz | tar xz
+# Linux
+curl -sSL https://github.com/ddevilz/phasedb/releases/latest/download/phasedb_0.1.0_linux_amd64.tar.gz | tar xz
+# macOS (Apple Silicon)
+curl -sSL https://github.com/ddevilz/phasedb/releases/latest/download/phasedb_0.1.0_darwin_arm64.tar.gz | tar xz
 ```
 
 ### From source
