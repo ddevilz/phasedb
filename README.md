@@ -33,7 +33,6 @@ Add column as nullable   →  Fill data in batches     →  Make column NOT NULL
 
 ### Homebrew
 ```bash
-brew tap ddevilz/phasedb
 brew install ddevilz/phasedb/phasedb
 ```
 
