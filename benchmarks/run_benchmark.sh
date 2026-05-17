@@ -89,6 +89,7 @@ ROWS_FMT=$(printf "%'d" "$ROWS")
 echo "==> Seeding $ROWS_FMT rows via recursive CTE..."
 
 $MYSQL "$DB_NAME" -e "
+SET SESSION cte_max_recursion_depth = $ROWS;
 INSERT INTO benchmark_events (user_id, payload)
 WITH RECURSIVE seq(n) AS (
   SELECT 1
