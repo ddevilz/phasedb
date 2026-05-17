@@ -144,36 +144,36 @@ database: mysql
 phases:
   - name: expand
     sql: |
-      ALTER TABLE events ADD COLUMN checksum VARCHAR(64) NULL;
+      ALTER TABLE EVENTS ADD COLUMN CHECKSUM VARCHAR(64) NULL;
     rollback_sql: |
-      ALTER TABLE events DROP COLUMN checksum;
+      ALTER TABLE EVENTS DROP COLUMN CHECKSUM;
 
   - name: backfill
     on_failure: rollback
     batch:
       query: |
-        UPDATE events
-        SET checksum = SHA2(CONCAT(user_id, payload), 256)
-        WHERE checksum IS NULL
+        UPDATE EVENTS
+        SET CHECKSUM = SHA2(CONCAT(USER_ID, PAYLOAD), 256)
+        WHERE CHECKSUM IS NULL
         LIMIT {batch_size}
       size: 1000
       delay_ms: 10
       lag_threshold_ms: 500
-      done_when: "SELECT COUNT(*) FROM events WHERE checksum IS NULL"
+      done_when: "SELECT COUNT(*) FROM EVENTS WHERE CHECKSUM IS NULL"
       done_expected: 0
 
   - name: gate
     wait_until:
-      query: "SELECT COUNT(*) FROM events WHERE checksum IS NULL"
+      query: "SELECT COUNT(*) FROM EVENTS WHERE CHECKSUM IS NULL"
       expected: 0
       poll_interval_ms: 5000
       timeout_minutes: 120
 
   - name: contract
     sql: |
-      ALTER TABLE events MODIFY COLUMN checksum VARCHAR(64) NOT NULL;
-      ALTER TABLE events ADD INDEX idx_checksum (checksum);
+      ALTER TABLE EVENTS MODIFY COLUMN CHECKSUM VARCHAR(64) NOT NULL;
+      ALTER TABLE EVENTS ADD INDEX IDX_CHECKSUM (CHECKSUM);
     rollback_sql: |
-      ALTER TABLE events DROP INDEX idx_checksum;
-      ALTER TABLE events MODIFY COLUMN checksum VARCHAR(64) NULL;
+      ALTER TABLE EVENTS DROP INDEX IDX_CHECKSUM;
+      ALTER TABLE EVENTS MODIFY COLUMN CHECKSUM VARCHAR(64) NULL;
 ```
