@@ -80,6 +80,7 @@ func (r *ruleExplainFullScan) Check(ctx context.Context, m *config.MigrationFile
 		}
 		// Replace {batch_size} with a small literal for EXPLAIN purposes
 		q := strings.ReplaceAll(p.Batch.Query, "{batch_size}", "1")
+		q = strings.ReplaceAll(q, "{last_id}", "0")
 		result, err := adapter.RunEXPLAIN(ctx, q)
 		if err != nil {
 			findings = append(findings, Finding{
