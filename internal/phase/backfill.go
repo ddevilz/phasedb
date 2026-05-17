@@ -63,7 +63,9 @@ func (b *BackfillExecutor) Execute(ctx context.Context, adapter db.Adapter, s st
 		}
 		if cp != nil {
 			var saved backfillCheckpoint
-			if jsonErr := json.Unmarshal([]byte(cp.CheckpointJSON), &saved); jsonErr == nil {
+			if jsonErr := json.Unmarshal([]byte(cp.CheckpointJSON), &saved); jsonErr != nil {
+				slog.Warn("backfill: checkpoint JSON unmarshal failed, resuming from zero", "err", jsonErr)
+			} else {
 				lastPK = saved.LastPK
 			}
 		}
@@ -129,6 +131,26 @@ func (b *BackfillExecutor) Execute(ctx context.Context, adapter db.Adapter, s st
 				return fmt.Errorf("backfill: done_when check: %w", doneErr)
 			}
 			if remaining == cfg.DoneExpected {
+				// Write final checkpoint to persist lastPK before completion
+				cp := backfillCheckpoint{
+					RowsProcessedTotal: totalProcessed,
+					BatchNumber:        batchNum,
+					NullRowsAtStart:    nullAtStart,
+					LastBatchAffected:  0,
+					LastPK:             lastPK,
+					CheckpointedAt:     time.Now().UTC().Format(time.RFC3339),
+				}
+				cpJSON, _ := json.Marshal(cp)
+				if cpJSON == nil {
+					cpJSON = []byte(`{}`)
+				}
+				_ = s.InsertCheckpoint(ctx, store.CheckpointRow{
+					MigrationName:  b.Migration,
+					PhaseName:      b.Phase.Name,
+					AttemptNumber:  b.AttemptNumber,
+					StatementIndex: 0,
+					CheckpointJSON: string(cpJSON),
+				})
 				return nil // done — runner inserts PHASE_COMPLETED
 			}
 			slog.Info("backfill: batch empty but done_when not satisfied, continuing",

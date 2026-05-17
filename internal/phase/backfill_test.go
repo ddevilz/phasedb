@@ -105,9 +105,9 @@ func TestBackfillExecutor_CheckpointEveryZero(t *testing.T) {
 	if err := ex.Execute(context.Background(), adapter, s); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Normalized to 1 → checkpoint after every batch with affected>0 → 1 checkpoint
-	if len(s.checkpoints) != 1 {
-		t.Errorf("expected 1 checkpoint (checkpointEvery normalized to 1), got %d", len(s.checkpoints))
+	// Normalized to 1 → checkpoint after every batch with affected>0 → 1 checkpoint, plus final checkpoint on clean exit → 2 total
+	if len(s.checkpoints) != 2 {
+		t.Errorf("expected 2 checkpoints (1 after batch + 1 final), got %d", len(s.checkpoints))
 	}
 }
 
@@ -146,9 +146,9 @@ func TestBackfillExecutor_CheckpointEvery(t *testing.T) {
 	if err := ex.Execute(context.Background(), adapter, s); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Checkpoint at batch 5 and batch 10 only = 2 total
-	if len(s.checkpoints) != 2 {
-		t.Errorf("expected 2 checkpoints (at batch 5 and 10), got %d", len(s.checkpoints))
+	// Checkpoint at batch 5 and batch 10, plus final checkpoint on clean exit = 3 total
+	if len(s.checkpoints) != 3 {
+		t.Errorf("expected 3 checkpoints (at batch 5, 10, and final), got %d", len(s.checkpoints))
 	}
 }
 
