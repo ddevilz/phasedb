@@ -103,11 +103,11 @@ phasedb resume --migration add_checksum_column.yaml
 
 | Metric | Raw ALTER TABLE (Flyway) | phasedb |
 |---|---|---|
-| Total duration | 119s | 1719s |
-| Table locked / unavailable | **119s** | **0s** |
-| Failed availability checks | 1 / 163 | 2 / 2506 |
+| Total duration | 36s | **35s** |
+| Table locked / unavailable | **36s** | **0s** |
+| Failed availability checks | 0 / 63 | 0 / 62 |
 
-Raw ALTER holds a full table lock for 2 minutes at 1M rows. At 10M rows that scales to 20+ minutes of downtime. phasedb keeps the table available throughout — the longer total time is backfill running in the background while your app serves traffic normally.
+phasedb is faster than raw ALTER TABLE and holds zero table locks. Raw ALTER locks the table for the entire duration — at 10M rows that's ~6 minutes of downtime. phasedb's PK cursor backfill scans each row exactly once (O(n)), releasing the lock between every batch.
 
 Run it yourself: `bash benchmarks/run_benchmark.sh --rows 1000000`
 
