@@ -14,6 +14,21 @@ Flyway and Liquibase treat every migration as an atomic SQL script. On tables wi
 - Gets killed mid-execution leaving metadata in a `FAILED` state
 - Triggers lock timeout and corrupts the migration sequence
 
+## vs. Flyway / Liquibase
+
+| Feature | phasedb | Flyway | Liquibase |
+|---|---|---|---|
+| Zero-downtime on large tables | ✅ | ❌ | ❌ |
+| Resumable migrations | ✅ | ❌ | ❌ |
+| Backfill throttling (lag-aware) | ✅ | ❌ | ❌ |
+| No table locks during migration | ✅ | ❌ | ❌ |
+| Lint + time estimate before run | ✅ | ❌ | ❌ |
+| Postgres support | Roadmap | ✅ | ✅ |
+| Spring Boot / framework integration | ❌ | ✅ | ✅ |
+
+**Use phasedb when**: your table has >1M rows and you can't afford downtime.  
+**Use Flyway/Liquibase when**: you need framework integration or Postgres and your tables are small enough that `ALTER TABLE` is instant.
+
 ---
 
 ## The Pattern
@@ -79,6 +94,14 @@ phasedb status --migration add_checksum_column --format json
 ```bash
 phasedb resume --migration add_checksum_column.yaml
 ```
+
+---
+
+## Benchmarks
+
+Run the benchmarks yourself: `bash benchmarks/run_benchmark.sh --rows 1000000`
+
+Results are written to `benchmarks/RESULTS.md`. We'll publish official numbers here once we have them from production-scale tables.
 
 ---
 
