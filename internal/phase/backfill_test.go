@@ -2,6 +2,8 @@ package phase_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/ddevilz/phasedb/internal/config"
@@ -182,5 +184,123 @@ func TestBackfillExecutor_LagNotCalledWhenThresholdZero(t *testing.T) {
 	}
 	if adapter.lagCallCount != 0 {
 		t.Errorf("expected 0 GetReplicaLag calls with threshold=0, got %d", adapter.lagCallCount)
+	}
+}
+
+// TestBackfillExecutor_LastIDSubstituted verifies that {last_id} in the batch
+// query is replaced with the current cursor value when PKCursorQuery is set.
+func TestBackfillExecutor_LastIDSubstituted(t *testing.T) {
+	adapter := &mockAdapterFull{
+		batchResults:  []int64{5, 0},
+		scalarResults: []int64{5, 500, 0},
+	}
+	s := &mockStore{}
+
+	ex := &phase.BackfillExecutor{
+		Phase: config.Phase{
+			Name: "backfill",
+			Batch: &config.BatchConfig{
+				Query:         "UPDATE T SET C = 1 WHERE ID > {last_id} AND C IS NULL LIMIT {batch_size}",
+				Size:          5,
+				DelayMs:       0,
+				PKColumn:      "id",
+				PKCursorQuery: "SELECT COALESCE(MAX(ID), {last_id}) FROM T WHERE ID > {last_id} ORDER BY ID LIMIT {batch_size}",
+				DoneWhen:      "SELECT COUNT(*) FROM T WHERE C IS NULL",
+				DoneExpected:  0,
+			},
+		},
+		Migration:     "V1",
+		AttemptNumber: 1,
+	}
+
+	if err := ex.Execute(context.Background(), adapter, s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(adapter.capturedBatchQueries) < 2 {
+		t.Fatalf("expected 2 batch calls, got %d", len(adapter.capturedBatchQueries))
+	}
+	// Batch 1: lastPK=0, so {last_id} → "0"
+	if !strings.Contains(adapter.capturedBatchQueries[0], "ID > 0") {
+		t.Errorf("batch 1: expected 'ID > 0', got: %s", adapter.capturedBatchQueries[0])
+	}
+	// Batch 2: cursor returned 500, so {last_id} → "500"
+	if !strings.Contains(adapter.capturedBatchQueries[1], "ID > 500") {
+		t.Errorf("batch 2: expected 'ID > 500', got: %s", adapter.capturedBatchQueries[1])
+	}
+}
+
+// TestBackfillExecutor_LastIDNotSubstitutedWithoutCursorQuery verifies that
+// {last_id} in the query is left as-is when PKCursorQuery is empty, preserving
+// backward compatibility with existing migrations.
+func TestBackfillExecutor_LastIDNotSubstitutedWithoutCursorQuery(t *testing.T) {
+	adapter := &mockAdapterFull{
+		batchResults:  []int64{0},
+		scalarResults: []int64{0, 0},
+	}
+	s := &mockStore{}
+
+	const query = "UPDATE T SET C = 1 WHERE ID > {last_id} AND C IS NULL LIMIT {batch_size}"
+	ex := &phase.BackfillExecutor{
+		Phase: config.Phase{
+			Name: "backfill",
+			Batch: &config.BatchConfig{
+				Query:        query,
+				Size:         5,
+				DelayMs:      0,
+				DoneWhen:     "SELECT COUNT(*) FROM T WHERE C IS NULL",
+				DoneExpected: 0,
+				// PKCursorQuery intentionally empty
+			},
+		},
+		Migration:     "V1",
+		AttemptNumber: 1,
+	}
+
+	if err := ex.Execute(context.Background(), adapter, s); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(adapter.capturedBatchQueries) == 0 {
+		t.Fatal("no batch queries captured")
+	}
+	// {last_id} must survive unchanged
+	if !strings.Contains(adapter.capturedBatchQueries[0], "{last_id}") {
+		t.Errorf("expected literal {last_id} in query (no substitution), got: %s", adapter.capturedBatchQueries[0])
+	}
+}
+
+// TestBackfillExecutor_PKCursorQueryError verifies that an error from
+// pk_cursor_query causes Execute to return immediately (fatal behavior).
+func TestBackfillExecutor_PKCursorQueryError(t *testing.T) {
+	adapter := &mockAdapterFull{
+		batchResults:  []int64{5},
+		scalarResults: []int64{5},
+		scalarErrs:    []error{nil, fmt.Errorf("cursor query failed: table not found")},
+	}
+	s := &mockStore{}
+
+	ex := &phase.BackfillExecutor{
+		Phase: config.Phase{
+			Name: "backfill",
+			Batch: &config.BatchConfig{
+				Query:         "UPDATE T SET C = 1 WHERE ID > {last_id} AND C IS NULL LIMIT {batch_size}",
+				Size:          5,
+				DelayMs:       0,
+				PKColumn:      "id",
+				PKCursorQuery: "SELECT MAX(ID) FROM T WHERE ID > {last_id}",
+				DoneWhen:      "SELECT COUNT(*) FROM T WHERE C IS NULL",
+				DoneExpected:  0,
+			},
+		},
+		Migration:     "V1",
+		AttemptNumber: 1,
+	}
+
+	err := ex.Execute(context.Background(), adapter, s)
+	if err == nil {
+		t.Fatal("expected error from pk_cursor_query failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "cursor query failed") {
+		t.Errorf("expected cursor error in message, got: %v", err)
 	}
 }
