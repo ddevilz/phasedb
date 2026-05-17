@@ -74,11 +74,11 @@ echo "    MySQL ready after ${WAIT}s"
 echo "==> Setting up benchmark database '$DB_NAME'..."
 $MYSQL -e "DROP DATABASE IF EXISTS $DB_NAME; CREATE DATABASE $DB_NAME;"
 $MYSQL "$DB_NAME" <<'SQL'
-CREATE TABLE benchmark_events (
-  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
-  user_id    BIGINT NOT NULL,
-  payload    TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE BENCHMARK_EVENTS (
+  ID         BIGINT AUTO_INCREMENT PRIMARY KEY,
+  USER_ID    BIGINT NOT NULL,
+  PAYLOAD    TEXT NOT NULL,
+  CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 SQL
 
@@ -90,7 +90,7 @@ echo "==> Seeding $ROWS_FMT rows via recursive CTE..."
 
 $MYSQL "$DB_NAME" -e "
 SET SESSION cte_max_recursion_depth = $ROWS;
-INSERT INTO benchmark_events (user_id, payload)
+INSERT INTO BENCHMARK_EVENTS (USER_ID, PAYLOAD)
 WITH RECURSIVE seq(n) AS (
   SELECT 1
   UNION ALL
@@ -107,7 +107,7 @@ echo "    Inserted $ROWS_FMT rows"
 availability_poll() {
   local logfile="$1"
   while true; do
-    if mysql -h 127.0.0.1 -P 3306 -u root -proot --connect-timeout=1 --get-server-public-key "$DB_NAME" -e 'SELECT 1 FROM benchmark_events LIMIT 1' &>/dev/null 2>&1; then
+    if mysql -h 127.0.0.1 -P 3306 -u root -proot --connect-timeout=1 --get-server-public-key "$DB_NAME" -e 'SELECT 1 FROM BENCHMARK_EVENTS LIMIT 1' &>/dev/null 2>&1; then
       echo "ok" >> "$logfile"
     else
       echo "fail" >> "$logfile"
@@ -142,11 +142,11 @@ POLLER_A=$!
 
 ALTER_START=$(now_ms)
 # Step 1: ADD COLUMN NULL (INSTANT on MySQL 8.0)
-$MYSQL "$DB_NAME" -e "ALTER TABLE benchmark_events ADD COLUMN checksum VARCHAR(64) NULL;" 2>/dev/null
+$MYSQL "$DB_NAME" -e "ALTER TABLE BENCHMARK_EVENTS ADD COLUMN CHECKSUM VARCHAR(64) NULL;" 2>/dev/null
 # Step 2: UPDATE all rows (what Flyway would do inline)
-$MYSQL "$DB_NAME" -e "UPDATE benchmark_events SET checksum = SHA2(CONCAT(user_id, payload), 256);" 2>/dev/null
+$MYSQL "$DB_NAME" -e "UPDATE BENCHMARK_EVENTS SET CHECKSUM = SHA2(CONCAT(USER_ID, PAYLOAD), 256);" 2>/dev/null
 # Step 3: MODIFY COLUMN NOT NULL + ADD INDEX (locks table, table scan)
-$MYSQL "$DB_NAME" -e "ALTER TABLE benchmark_events MODIFY COLUMN checksum VARCHAR(64) NOT NULL, ADD INDEX idx_checksum (checksum);" 2>/dev/null
+$MYSQL "$DB_NAME" -e "ALTER TABLE BENCHMARK_EVENTS MODIFY COLUMN CHECKSUM VARCHAR(64) NOT NULL, ADD INDEX IDX_CHECKSUM (CHECKSUM);" 2>/dev/null
 ALTER_END=$(now_ms)
 
 kill $POLLER_A 2>/dev/null || true
@@ -162,7 +162,7 @@ echo "    Done in ${ALTER_DURATION_S}s — failed availability checks: $ALTER_FA
 # Reset table
 # ---------------------------------------------------------------------------
 echo "==> Resetting table (DROP COLUMN + INDEX)..."
-$MYSQL "$DB_NAME" -e "ALTER TABLE benchmark_events DROP INDEX idx_checksum, DROP COLUMN checksum;" 2>/dev/null
+$MYSQL "$DB_NAME" -e "ALTER TABLE BENCHMARK_EVENTS DROP INDEX IDX_CHECKSUM, DROP COLUMN CHECKSUM;" 2>/dev/null
 
 # ---------------------------------------------------------------------------
 # BENCHMARK B — phasedb
