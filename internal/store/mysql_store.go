@@ -99,9 +99,9 @@ func (s *mysqlStore) EnsureSchema(ctx context.Context) error {
 // InsertEvent inserts a PhaseEvent into phasedb_history.
 func (s *mysqlStore) InsertEvent(ctx context.Context, e PhaseEvent) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO phasedb_history
-			(migration_name, phase_name, attempt_number, event_type, phase_type,
-			 phase_config_json, rows_affected, error_message, installed_by, phasedb_version)
+		INSERT INTO PHASEDB_HISTORY
+			(MIGRATION_NAME, PHASE_NAME, ATTEMPT_NUMBER, EVENT_TYPE, PHASE_TYPE,
+			 PHASE_CONFIG_JSON, ROWS_AFFECTED, ERROR_MESSAGE, INSTALLED_BY, PHASEDB_VERSION)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.MigrationName, e.PhaseName, e.AttemptNumber, e.EventType, e.PhaseType,
 		e.PhaseConfigJSON, e.RowsAffected, e.ErrorMessage, e.InstalledBy, e.PhasedbVersion,
@@ -115,11 +115,11 @@ func (s *mysqlStore) InsertEvent(ctx context.Context, e PhaseEvent) error {
 // LatestEvent returns the most recent event for a given migration and phase.
 func (s *mysqlStore) LatestEvent(ctx context.Context, migration, phase string) (*PhaseEvent, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, migration_name, phase_name, attempt_number, event_type, phase_type,
-		       phase_config_json, rows_affected, error_message, installed_by, phasedb_version, created_at
-		FROM phasedb_history
-		WHERE migration_name = ? AND phase_name = ?
-		ORDER BY id DESC
+		SELECT ID, MIGRATION_NAME, PHASE_NAME, ATTEMPT_NUMBER, EVENT_TYPE, PHASE_TYPE,
+		       PHASE_CONFIG_JSON, ROWS_AFFECTED, ERROR_MESSAGE, INSTALLED_BY, PHASEDB_VERSION, CREATED_AT
+		FROM PHASEDB_HISTORY
+		WHERE MIGRATION_NAME = ? AND PHASE_NAME = ?
+		ORDER BY ID DESC
 		LIMIT 1`,
 		migration, phase,
 	)
@@ -133,11 +133,11 @@ func (s *mysqlStore) LatestEvent(ctx context.Context, migration, phase string) (
 // LatestEventForAttempt returns the most recent event for a given migration, phase, and attempt number.
 func (s *mysqlStore) LatestEventForAttempt(ctx context.Context, migration, phase string, attempt int) (*PhaseEvent, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, migration_name, phase_name, attempt_number, event_type, phase_type,
-		       phase_config_json, rows_affected, error_message, installed_by, phasedb_version, created_at
-		FROM phasedb_history
-		WHERE migration_name = ? AND phase_name = ? AND attempt_number = ?
-		ORDER BY id DESC
+		SELECT ID, MIGRATION_NAME, PHASE_NAME, ATTEMPT_NUMBER, EVENT_TYPE, PHASE_TYPE,
+		       PHASE_CONFIG_JSON, ROWS_AFFECTED, ERROR_MESSAGE, INSTALLED_BY, PHASEDB_VERSION, CREATED_AT
+		FROM PHASEDB_HISTORY
+		WHERE MIGRATION_NAME = ? AND PHASE_NAME = ? AND ATTEMPT_NUMBER = ?
+		ORDER BY ID DESC
 		LIMIT 1`,
 		migration, phase, attempt,
 	)
@@ -153,9 +153,9 @@ func (s *mysqlStore) LatestEventForAttempt(ctx context.Context, migration, phase
 func (s *mysqlStore) MaxAttemptNumber(ctx context.Context, migration, phase string) (int, error) {
 	var max sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT MAX(attempt_number)
-		FROM phasedb_history
-		WHERE migration_name = ? AND phase_name = ?`,
+		SELECT MAX(ATTEMPT_NUMBER)
+		FROM PHASEDB_HISTORY
+		WHERE MIGRATION_NAME = ? AND PHASE_NAME = ?`,
 		migration, phase,
 	).Scan(&max)
 	if err != nil {
@@ -170,8 +170,8 @@ func (s *mysqlStore) MaxAttemptNumber(ctx context.Context, migration, phase stri
 // InsertCheckpoint inserts a checkpoint row into phasedb_checkpoints.
 func (s *mysqlStore) InsertCheckpoint(ctx context.Context, c CheckpointRow) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO phasedb_checkpoints
-			(migration_name, phase_name, attempt_number, statement_index, checkpoint_json)
+		INSERT INTO PHASEDB_CHECKPOINTS
+			(MIGRATION_NAME, PHASE_NAME, ATTEMPT_NUMBER, STATEMENT_INDEX, CHECKPOINT_JSON)
 		VALUES (?, ?, ?, ?, ?)`,
 		c.MigrationName, c.PhaseName, c.AttemptNumber, c.StatementIndex, c.CheckpointJSON,
 	)
@@ -184,10 +184,10 @@ func (s *mysqlStore) InsertCheckpoint(ctx context.Context, c CheckpointRow) erro
 // LatestCheckpoint returns the most recent checkpoint for a given migration, phase, and attempt.
 func (s *mysqlStore) LatestCheckpoint(ctx context.Context, migration, phase string, attempt int) (*CheckpointRow, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, migration_name, phase_name, attempt_number, statement_index, checkpoint_json, created_at
-		FROM phasedb_checkpoints
-		WHERE migration_name = ? AND phase_name = ? AND attempt_number = ?
-		ORDER BY id DESC
+		SELECT ID, MIGRATION_NAME, PHASE_NAME, ATTEMPT_NUMBER, STATEMENT_INDEX, CHECKPOINT_JSON, CREATED_AT
+		FROM PHASEDB_CHECKPOINTS
+		WHERE MIGRATION_NAME = ? AND PHASE_NAME = ? AND ATTEMPT_NUMBER = ?
+		ORDER BY ID DESC
 		LIMIT 1`,
 		migration, phase, attempt,
 	)
@@ -208,7 +208,7 @@ func (s *mysqlStore) LatestCheckpoint(ctx context.Context, migration, phase stri
 // InsertHeartbeat records a heartbeat for a running phase.
 func (s *mysqlStore) InsertHeartbeat(ctx context.Context, migration, phase string, attempt int, processID string) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO phasedb_heartbeats (migration_name, phase_name, attempt_number, process_id)
+		INSERT INTO PHASEDB_HEARTBEATS (MIGRATION_NAME, PHASE_NAME, ATTEMPT_NUMBER, PROCESS_ID)
 		VALUES (?, ?, ?, ?)`,
 		migration, phase, attempt, processID,
 	)
@@ -221,19 +221,19 @@ func (s *mysqlStore) InsertHeartbeat(ctx context.Context, migration, phase strin
 // DeleteHeartbeatsForCompletedMigrations removes heartbeat rows for phases that are no longer running.
 func (s *mysqlStore) DeleteHeartbeatsForCompletedMigrations(ctx context.Context) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
-		DELETE h FROM phasedb_heartbeats h
+		DELETE h FROM PHASEDB_HEARTBEATS h
 		WHERE NOT EXISTS (
-			SELECT 1 FROM phasedb_history ph
-			WHERE ph.migration_name = h.migration_name
-			  AND ph.phase_name = h.phase_name
-			  AND ph.event_type = 'PHASE_STARTED'
+			SELECT 1 FROM PHASEDB_HISTORY ph
+			WHERE ph.MIGRATION_NAME = h.MIGRATION_NAME
+			  AND ph.PHASE_NAME = h.PHASE_NAME
+			  AND ph.EVENT_TYPE = 'PHASE_STARTED'
 			  AND NOT EXISTS (
-				SELECT 1 FROM phasedb_history ph2
-				WHERE ph2.migration_name = ph.migration_name
-				  AND ph2.phase_name = ph.phase_name
-				  AND ph2.attempt_number = ph.attempt_number
-				  AND ph2.event_type IN ('PHASE_COMPLETED','PHASE_FAILED','PHASE_TIMED_OUT','PHASE_ROLLED_BACK')
-				  AND ph2.id > ph.id
+				SELECT 1 FROM PHASEDB_HISTORY ph2
+				WHERE ph2.MIGRATION_NAME = ph.MIGRATION_NAME
+				  AND ph2.PHASE_NAME = ph.PHASE_NAME
+				  AND ph2.ATTEMPT_NUMBER = ph.ATTEMPT_NUMBER
+				  AND ph2.EVENT_TYPE IN ('PHASE_COMPLETED','PHASE_FAILED','PHASE_TIMED_OUT','PHASE_ROLLED_BACK')
+				  AND ph2.ID > ph.ID
 			  )
 		)`)
 	if err != nil {
@@ -250,7 +250,7 @@ func (s *mysqlStore) AcquireLock(ctx context.Context, migration, processID strin
 	expiresAt := now.Add(lockTTL)
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO phasedb_locks (migration_name, process_id, acquired_at, expires_at)
+		INSERT INTO PHASEDB_LOCKS (MIGRATION_NAME, PROCESS_ID, ACQUIRED_AT, EXPIRES_AT)
 		VALUES (?, ?, ?, ?)`,
 		migration, processID, now, expiresAt,
 	)
@@ -264,9 +264,9 @@ func (s *mysqlStore) AcquireLock(ctx context.Context, migration, processID strin
 
 	// Lock row exists — attempt a steal if the existing lock has expired.
 	res, err := s.db.ExecContext(ctx, `
-		UPDATE phasedb_locks
-		SET process_id = ?, acquired_at = ?, expires_at = ?
-		WHERE migration_name = ? AND expires_at < NOW(3)`,
+		UPDATE PHASEDB_LOCKS
+		SET PROCESS_ID = ?, ACQUIRED_AT = ?, EXPIRES_AT = ?
+		WHERE MIGRATION_NAME = ? AND EXPIRES_AT < NOW(3)`,
 		processID, now, expiresAt, migration,
 	)
 	if err != nil {
@@ -286,9 +286,9 @@ func (s *mysqlStore) AcquireLock(ctx context.Context, migration, processID strin
 func (s *mysqlStore) RefreshLock(ctx context.Context, migration, processID string) error {
 	newExpiry := time.Now().UTC().Add(lockTTL)
 	res, err := s.db.ExecContext(ctx, `
-		UPDATE phasedb_locks
-		SET expires_at = ?
-		WHERE migration_name = ? AND process_id = ?`,
+		UPDATE PHASEDB_LOCKS
+		SET EXPIRES_AT = ?
+		WHERE MIGRATION_NAME = ? AND PROCESS_ID = ?`,
 		newExpiry, migration, processID,
 	)
 	if err != nil {
@@ -307,7 +307,7 @@ func (s *mysqlStore) RefreshLock(ctx context.Context, migration, processID strin
 // ReleaseLock deletes the lock row for a migration.
 func (s *mysqlStore) ReleaseLock(ctx context.Context, migration string) error {
 	_, err := s.db.ExecContext(ctx, `
-		DELETE FROM phasedb_locks WHERE migration_name = ?`,
+		DELETE FROM PHASEDB_LOCKS WHERE MIGRATION_NAME = ?`,
 		migration,
 	)
 	if err != nil {
@@ -320,9 +320,9 @@ func (s *mysqlStore) ReleaseLock(ctx context.Context, migration string) error {
 func (s *mysqlStore) GetLock(ctx context.Context, migration string) (*LockRow, error) {
 	var l LockRow
 	err := s.db.QueryRowContext(ctx, `
-		SELECT migration_name, process_id, acquired_at, expires_at
-		FROM phasedb_locks
-		WHERE migration_name = ?`,
+		SELECT MIGRATION_NAME, PROCESS_ID, ACQUIRED_AT, EXPIRES_AT
+		FROM PHASEDB_LOCKS
+		WHERE MIGRATION_NAME = ?`,
 		migration,
 	).Scan(&l.MigrationName, &l.ProcessID, &l.AcquiredAt, &l.ExpiresAt)
 	if err == sql.ErrNoRows {
