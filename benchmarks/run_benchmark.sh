@@ -43,12 +43,9 @@ for dep in docker mysql; do
   fi
 done
 
-if ! command -v phasedb &>/dev/null; then
-  echo "ERROR: 'phasedb' not found in PATH."
-  echo "  Run: go install ./cmd/phasedb"
-  echo "  Or:  go install github.com/ddevilz/phasedb/cmd/phasedb@latest"
-  exit 1
-fi
+PHASEDB_BIN="$REPO_ROOT/bin/phasedb"
+echo "==> Building phasedb from source..."
+go build -o "$PHASEDB_BIN" "$REPO_ROOT/cmd/phasedb" || { echo "ERROR: go build failed"; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Start MySQL
@@ -226,7 +223,7 @@ POLLER_B=$!
 
 export DATABASE_URL="$DATABASE_URL"
 PHASEDB_START=$(now_ms)
-phasedb run --migration "$BENCH_MIGRATION"
+"$PHASEDB_BIN" run --migration "$BENCH_MIGRATION"
 PHASEDB_END=$(now_ms)
 
 kill $POLLER_B 2>/dev/null || true
