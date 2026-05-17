@@ -99,9 +99,19 @@ phasedb resume --migration add_checksum_column.yaml
 
 ## Benchmarks
 
-Run the benchmarks yourself: `bash benchmarks/run_benchmark.sh --rows 1000000`
+**1,000,000 row table on MySQL 8.0 (MacBook M-series, Docker):**
 
-Results are written to `benchmarks/RESULTS.md`. We'll publish official numbers here once we have them from production-scale tables.
+| Metric | Raw ALTER TABLE (Flyway) | phasedb |
+|---|---|---|
+| Total duration | 119s | 1719s |
+| Table locked / unavailable | **119s** | **0s** |
+| Failed availability checks | 1 / 163 | 2 / 2506 |
+
+Raw ALTER holds a full table lock for 2 minutes at 1M rows. At 10M rows that scales to 20+ minutes of downtime. phasedb keeps the table available throughout — the longer total time is backfill running in the background while your app serves traffic normally.
+
+Run it yourself: `bash benchmarks/run_benchmark.sh --rows 1000000`
+
+Full results: [benchmarks/RESULTS.md](benchmarks/RESULTS.md)
 
 ---
 

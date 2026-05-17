@@ -17,6 +17,8 @@ type BatchConfig struct {
 	DelayMs        int    `yaml:"delay_ms"`
 	LagThresholdMs int    `yaml:"lag_threshold_ms"`
 	PKColumn       string `yaml:"pk_column"`
+	PKCursorQuery  string `yaml:"pk_cursor_query"`
+	CheckpointEvery int   `yaml:"checkpoint_every"`
 	DoneWhen       string `yaml:"done_when"`
 	DoneExpected   int64  `yaml:"done_expected"`
 }
