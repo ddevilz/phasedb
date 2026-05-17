@@ -177,40 +177,46 @@ database: mysql
 phases:
   - name: expand
     sql: |
-      ALTER TABLE benchmark_events ADD COLUMN checksum VARCHAR(64) NULL;
+      ALTER TABLE BENCHMARK_EVENTS ADD COLUMN CHECKSUM VARCHAR(64) NULL;
     rollback_sql: |
-      ALTER TABLE benchmark_events DROP COLUMN checksum;
+      ALTER TABLE BENCHMARK_EVENTS DROP COLUMN CHECKSUM;
 
   - name: backfill
     on_failure: rollback
     batch:
+      pk_column: id
       query: |
-        UPDATE benchmark_events
-        SET checksum = SHA2(CONCAT(user_id, payload), 256)
-        WHERE checksum IS NULL
+        UPDATE BENCHMARK_EVENTS
+        SET CHECKSUM = SHA2(CONCAT(USER_ID, PAYLOAD), 256)
+        WHERE ID > {last_id} AND CHECKSUM IS NULL
+        ORDER BY ID
         LIMIT {batch_size}
-      size: 500
-      delay_ms: 5
+      pk_cursor_query: |
+        SELECT COALESCE(MAX(subq.ID), {last_id})
+        FROM (SELECT ID FROM BENCHMARK_EVENTS WHERE ID > {last_id} ORDER BY ID LIMIT {batch_size}) subq
+      size: 5000
+      delay_ms: 1
+      checkpoint_every: 10
       lag_threshold_ms: 500
-      done_when: "SELECT COUNT(*) FROM benchmark_events WHERE checksum IS NULL"
+      done_when: "SELECT COUNT(*) FROM BENCHMARK_EVENTS WHERE CHECKSUM IS NULL"
       done_expected: 0
     rollback_sql: |
-      UPDATE benchmark_events SET checksum = NULL
+      UPDATE BENCHMARK_EVENTS SET CHECKSUM = NULL
 
   - name: gate
     wait_until:
-      query: "SELECT COUNT(*) FROM benchmark_events WHERE checksum IS NULL"
+      query: "SELECT COUNT(*) FROM BENCHMARK_EVENTS WHERE CHECKSUM IS NULL"
       expected: 0
       poll_interval_ms: 2000
       timeout_minutes: 120
 
   - name: contract
     sql: |
-      ALTER TABLE benchmark_events MODIFY COLUMN checksum VARCHAR(64) NOT NULL;
-      ALTER TABLE benchmark_events ADD INDEX idx_bench_checksum (checksum);
+      ALTER TABLE BENCHMARK_EVENTS MODIFY COLUMN CHECKSUM VARCHAR(64) NOT NULL;
+      ALTER TABLE BENCHMARK_EVENTS ADD INDEX IDX_BENCH_CHECKSUM (CHECKSUM);
     rollback_sql: |
-      ALTER TABLE benchmark_events DROP INDEX idx_bench_checksum;
-      ALTER TABLE benchmark_events MODIFY COLUMN checksum VARCHAR(64) NULL;
+      ALTER TABLE BENCHMARK_EVENTS DROP INDEX IDX_BENCH_CHECKSUM;
+      ALTER TABLE BENCHMARK_EVENTS MODIFY COLUMN CHECKSUM VARCHAR(64) NULL;
 YAML
 
 # Start availability poller
