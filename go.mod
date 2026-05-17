@@ -1,12 +1,16 @@
 module github.com/ddevilz/phasedb
 
-go 1.26.2
+go 1.26.3
 
-require github.com/spf13/cobra v1.10.2
+require (
+	github.com/go-sql-driver/mysql v1.10.0
+	github.com/spf13/cobra v1.10.2
+	gopkg.in/yaml.v3 v3.0.1
+	vitess.io/vitess v0.24.0
+)
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/golang/glog v1.2.5 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lmittmann/tint v1.1.3 // indirect
@@ -17,6 +21,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
-	vitess.io/vitess v0.24.0 // indirect
 )
